@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="analizadorLexico" default="compile" basedir=".">
+    <description>
+        Build script para NetBeans + Ant + JFlex + CUP. 
+        Antes de compilar, genera automáticamente Lexer.java y Sintax.java/sym.java.
+    </description>
+
+    <!-- =============================== -->
+    <!-- 1) PROPIEDADES DE LOS JAR       -->
+    <!-- =============================== -->
+    <!-- Ajusta estos nombres si tus JAR cambian de nombre o ubicación -->
+    <property name="jflex.jar"   value="lib/JFlex.jar"/>
+    <property name="cup.jar"     value="lib/java-cup-11a.jar"/>
+
+    <!-- =============================== -->
+    <!-- 2) TARGET: generate-lexer      -->
+    <!--    Ejecuta JFlex en Lexer.flex -->
+    <!-- =============================== -->
+    <target name="generate-lexer" description="Genera src/codigo/Lexer.java desde LexerCup.flex">
+        <!-- Asegurarnos de que la carpeta de destino exista -->
+        <mkdir dir="src/codigo"/>
+
+        <!-- Invocamos al JAR de JFlex directamente -->
+        <java jar="${jflex.jar}" fork="true" failonerror="true">
+            <arg value="src/codigo/LexerCup.flex"/>
+        </java>
+    </target>
+
+    <!-- =============================== -->
+    <!-- 3) TARGET: generate-parser     -->
+    <!--    Ejecuta CUP en Sintax.cup    -->
+    <!-- =============================== -->
+    <target name="generate-parser" description="Genera src/codigo/Sintax.java y src/codigo/sym.java desde Sintax.cup">
+        <!-- Asegurarnos de que la carpeta de destino exista -->
+        <mkdir dir="src/codigo"/>
+
+        <!-- Invocamos a CUP mediante java -jar -->
+        <java jar="${cup.jar}" fork="true" failonerror="true">
+            <!-- Le decimos a CUP que genere una clase 'Sintax' y un 'sym.java' -->
+            <arg value="-parser"/>
+            <arg value="Sintax"/>
+            <arg value="-symbols"/>
+            <arg value="sym"/>
+            <arg value="-destdir"/>
+            <arg value="src/codigo"/>
+            <!-- Archivo .cup a procesar -->
+            <arg value="src/codigo/Sintax.cup"/>
+        </java>
+    </target>
+
+    <!-- =============================== -->
+    <!-- 4) TARGET: -pre-compile         -->
+    <!--    Se ejecuta antes de javac     -->
+    <!-- =============================== -->
+    <target name="-pre-compile" description="Corre generate-lexer y generate-parser antes de compilar" 
+            depends="generate-lexer,generate-parser">
+        <!-- Con las dependencias basta para que Ant primero genere el lexer y el parser -->
+    </target>
+
+    <!-- =============================== -->
+    <!-- 5) IMPORTAMOS build-impl.xml    -->
+    <!--    Script que NetBeans genera   -->
+    <!-- =============================== -->
+    <import file="nbproject/build-impl.xml"/>
+</project>

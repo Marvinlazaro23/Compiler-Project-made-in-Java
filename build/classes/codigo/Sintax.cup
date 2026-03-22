@@ -1,0 +1,330 @@
+    /* Sintax.cup actualizado para manejar constantes booleanas y PI como double */
+package codigo;
+import java_cup.runtime.*;
+
+/* —— Bloque Java del parser —— */
+parser code {:
+    private Symbol s;
+    public void syntax_error(Symbol s) { this.s = s; }
+    public Symbol getS()          { return this.s; }
+
+    // —— SEMÁNTICA (atributos de instancia) ——
+    public java.util.Map<String,Double> symbolTable = new java.util.HashMap<>();
+    public java.util.List<String>    semanticResults = new java.util.ArrayList<>();
+
+    /** Para que la GUI recupere los resultados semánticos */
+    public java.util.List<String> getSemanticResults(){
+        return semanticResults;
+    }
+:};
+
+/* —— Terminales —— */
+terminal Comillas, T_dato, Int, Cadena, INICIO, FIN, Var, LEER, IMPRIMIR,
+         Repetir, Hasta, Hacer, Fin_repetir, Mientras, Fin_mientras,
+         Si, Entonces, Sino, Fin_si, Op_booleano, NULL, PI, MAX_INT,
+         Op_relacional, Op_incremento, Igual, Suma, Resta,
+         Multiplicacion, Division, Parentesis_a, Parentesis_c,
+         Llave_a, Llave_c, P_coma, Identificador, Numero, ERROR;
+
+/* —— No-terminales —— */
+nonterminal INIT,
+            SENTENCIAS,
+            SENTENCIA,
+            DECLARACION,
+            VAR_DECLARACION,
+            ASIGNACION,
+            PRINT_STATEMENT,
+            READ_STATEMENT,
+            IF,
+            IF_ELSE,
+            WHILE,
+            REPEAT_LOOP,
+            EXPRESION,
+            TERMINO,
+            FACTOR,
+            CONSTANTE,
+            PRINT_CONCAT,
+            BLOQUE,
+            SENTENCIA_BOOLEANA,
+            PRINT_CONCAT_REST;
+
+/* —— Precedencias —— */
+precedence left Op_relacional;
+precedence left Suma, Resta;
+precedence left Multiplicacion, Division;
+
+start with INIT;
+
+/* ———————————————————————————————————————————————— */
+/* PRODUCCIONES */
+/* ———————————————————————————————————————————————— */
+
+/* 1) Producción inicial: vaciamos tabla y resultados antes de parsear */
+INIT ::=
+    INICIO
+    {:
+        parser.symbolTable.clear();
+        parser.semanticResults.clear();
+    :}
+    SENTENCIAS
+    FIN
+;
+
+/* 2) Lista (posiblemente vacía) de sentencias */
+SENTENCIAS ::=
+      /* vacío */
+    | SENTENCIAS SENTENCIA
+;
+
+/* 3) Cada tipo de sentencia posible */
+SENTENCIA ::=
+      DECLARACION
+    | VAR_DECLARACION
+    | ASIGNACION
+    | PRINT_STATEMENT
+    | READ_STATEMENT
+    | IF
+    | IF_ELSE
+    | WHILE
+    | REPEAT_LOOP
+;
+
+/* 4) Declaraciones de “int” (se almacenan como Double) */
+DECLARACION ::=
+    /* int id; */
+    Int Identificador:E P_coma
+    {:
+        String name = (String) E;
+        parser.symbolTable.put(name, 0.0);
+        RESULT = null;
+    :}
+  | /* int id = EXP; */
+    Int Identificador:E Igual EXPRESION:V P_coma
+    {:
+        String name = (String) E;
+        Double value = (Double) V;
+        parser.symbolTable.put(name, value);
+        RESULT = null;
+    :}
+;
+
+/* 5) Declaraciones de “var” */
+VAR_DECLARACION ::=
+    /* var id; */
+    Var Identificador:E P_coma
+    {:
+        String name = (String) E;
+        parser.symbolTable.put(name, 0.0);
+        RESULT = null;
+    :}
+  | /* var id = EXP; */
+    Var Identificador:E Igual EXPRESION:V P_coma
+    {:
+        String name = (String) E;
+        Double value = (Double) V;
+        parser.symbolTable.put(name, value);
+        RESULT = null;
+    :}
+;
+
+/* 6) Asignación: id = EXP; */
+ASIGNACION ::=
+    Identificador:E Igual EXPRESION:V P_coma
+    {:
+        String name = (String) E;
+        Double value = (Double) V;
+        parser.symbolTable.put(name, value);
+        RESULT = null;
+    :}
+;
+
+/* 7) PRINT_STATEMENT: aquí invocamos a PRINT_CONCAT */
+PRINT_STATEMENT ::=
+    IMPRIMIR Parentesis_a PRINT_CONCAT:V Parentesis_c P_coma
+    {:
+        parser.semanticResults.add((String)V);
+        RESULT = null;
+    :}
+;
+
+/* 8) READ_STATEMENT: igual que antes */
+READ_STATEMENT ::=
+    LEER Parentesis_a Identificador:E Parentesis_c P_coma
+    {:
+        RESULT = null;
+    :}
+;
+
+/* 9) If simple */
+IF ::=
+    Si Parentesis_a EXPRESION:V1 Op_relacional EXPRESION:V2 Parentesis_c
+      Entonces SENTENCIA Fin_si
+    {:
+        RESULT = null;
+    :}
+;
+
+/* 10) If con Else */
+IF_ELSE ::=
+    Si Parentesis_a EXPRESION:V1 Op_relacional EXPRESION:V2 Parentesis_c
+      Entonces SENTENCIA Sino SENTENCIA Fin_si
+    {:
+        RESULT = null;
+    :}
+;
+
+/* Reglas para SENTENCIA_BOOLEANA */
+SENTENCIA_BOOLEANA ::=
+      /* Caso 1: EXPRESION Op_relacional EXPRESION  (e.g. “a < b”) */
+      EXPRESION:E1 Op_relacional EXPRESION:E2 
+      {:
+          /* Podemos devolver un Booleano si se quisiera utilizar el resultado en Java,
+             pero en la gramática lo usamos solo como condición, así que RESULT no se emplea aquí */
+          RESULT = true;   /* O simplemente RESULT = null; si no usas el valor */
+      :}
+    | /* Caso 2: literal booleano “true” o “false” (token=Op_booleano) */
+      Op_booleano:B
+      {:
+          /* RESULT no es necesario si solo se evalúa la condición en el parser sintáctico.
+             Dejarlo en null es suficiente. */
+          RESULT = null;
+      :}
+    | /* Caso 3: expresión relacional entre paréntesis */
+      Parentesis_a EXPRESION:E1 Op_relacional EXPRESION:E2 Parentesis_c
+      {:
+          /* Igual que en el primer caso, devolvemos algún valor por consistencia,
+             aunque el parser solo use el hecho de que coincida la producción. */
+          RESULT = true;
+      :}
+;
+
+/* 11) While */
+WHILE ::= 
+    Mientras Parentesis_a SENTENCIA_BOOLEANA Parentesis_c 
+      BLOQUE Fin_mientras
+    {: RESULT = null; :}
+;
+
+/* 11.1) BLOQUE: un conjunto de sentencias entre { } */
+BLOQUE ::=
+      SENTENCIAS   /* lista de sentencias */
+;
+
+/* 12) Repeat-Until */
+REPEAT_LOOP ::=
+    Repetir Int Identificador:E Igual EXPRESION:V1 Hasta EXPRESION:V2
+      Hacer SENTENCIA Fin_repetir
+    {:
+        RESULT = null;
+    :}
+;
+
+/* 13) Expresiones aritméticas con Double */
+EXPRESION ::=
+      EXPRESION:E1 Suma TERMINO:T
+      {:
+         RESULT = ((Double) E1) + ((Double) T);
+      :}
+    | EXPRESION:E1 Resta TERMINO:T
+      {:
+         RESULT = ((Double) E1) - ((Double) T);
+      :}
+    | TERMINO:T
+      {:
+         RESULT = (Double) T;
+      :}
+;
+
+/* 14) Términos */
+TERMINO ::=
+      TERMINO:E1 Multiplicacion FACTOR:F
+      {:
+         RESULT = ((Double) E1) * ((Double) F);
+      :}
+    | TERMINO:E1 Division FACTOR:F
+      {:
+         RESULT = ((Double) E1) / ((Double) F);
+      :}
+    | FACTOR:F
+      {:
+         RESULT = (Double) F;
+      :}
+;
+
+/* 15) Factores (números, variables o constantes) */
+FACTOR ::=
+      Parentesis_a EXPRESION:V Parentesis_c
+      {:
+         RESULT = (Double) V;
+      :}
+    | Numero:N
+      {:
+         RESULT = Double.parseDouble((String) N);
+      :}
+    | Identificador:I
+      {:
+         String name = (String) I;
+         if (!parser.symbolTable.containsKey(name)) {
+             throw new RuntimeException("Variable no declarada: " + name);
+         }
+         RESULT = parser.symbolTable.get(name);
+      :}
+    | CONSTANTE:C   /* Ahora CONS = número, booleano o PI */
+      {:
+         RESULT = (Double) C;
+      :}
+;
+
+/* 16) Constantes predefinidas, ahora como Double */
+CONSTANTE ::=
+    NULL
+      {:
+        RESULT = 0.0;
+      :}
+  | PI
+      {:
+        RESULT = Math.PI;   /* 3.1415926535... */
+      :}
+  | MAX_INT
+      {:
+        RESULT = (double) Integer.MAX_VALUE;
+      :}
+  | Op_booleano:B  // el lexer devuelve Op_booleano para true/false
+  {:
+    String text = (String) B;
+    if ("true".equalsIgnoreCase(text))    RESULT = 1.0;
+    else if ("false".equalsIgnoreCase(text)) RESULT = 0.0;
+    else throw new RuntimeException("Literal booleano inválido: " + text);
+  :}
+;
+
+/* 17) PRINT_CONCAT y PRINT_CONCAT_REST */
+PRINT_CONCAT ::= 
+      /* 17.1) Una sola expresión numérica */
+      EXPRESION:E PRINT_CONCAT_REST:Rest
+      {:
+         String base = ((Double)E).toString();
+         RESULT = base + (String)Rest;
+      :}
+    | /* 17.2) Un literal de cadena primero */
+      Cadena:C PRINT_CONCAT_REST:Rest
+      {:
+         String texto = ((String)C).substring(1, ((String)C).length() - 1);
+         RESULT = texto + (String)Rest;
+      :}
+;
+
+PRINT_CONCAT_REST ::=
+      /* 17.3.0) Nada más que concatenar */
+        {: RESULT = ""; :}
+    | Cadena:C PRINT_CONCAT_REST:Rest
+        {:
+           String texto = ((String)C).substring(1, ((String)C).length() - 1);
+           RESULT = texto + (String)Rest;
+        :}
+    | EXPRESION:E PRINT_CONCAT_REST:Rest
+        {:
+           String valor = ((Double)E).toString();
+           RESULT = valor + (String)Rest;
+        :}
+;
